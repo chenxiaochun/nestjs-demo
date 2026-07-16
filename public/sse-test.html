@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SSE Chat 测试</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f4ef;
+        --surface: #fffdf8;
+        --ink: #1c1917;
+        --muted: #78716c;
+        --accent: #0f766e;
+        --accent-hover: #0d9488;
+        --border: #e7e5e4;
+        --danger: #b91c1c;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+        background:
+          radial-gradient(circle at top left, #d8f3ef 0%, transparent 40%),
+          radial-gradient(circle at bottom right, #f5e6c8 0%, transparent 35%), var(--bg);
+        color: var(--ink);
+      }
+
+      main {
+        width: min(720px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3rem 0 4rem;
+      }
+
+      h1 {
+        margin: 0 0 0.35rem;
+        font-size: 1.75rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+
+      .subtitle {
+        margin: 0 0 1.75rem;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.25rem;
+        box-shadow: 0 10px 30px rgba(28, 25, 23, 0.04);
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 110px;
+        resize: vertical;
+        padding: 0.85rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--ink);
+        font: inherit;
+        line-height: 1.5;
+        outline: none;
+      }
+
+      textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+      }
+
+      .actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+      }
+
+      button {
+        appearance: none;
+        border: none;
+        border-radius: 999px;
+        padding: 0.7rem 1.25rem;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      button.primary:hover:not(:disabled) {
+        background: var(--accent-hover);
+      }
+
+      button.secondary {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .status {
+        margin-top: 0.85rem;
+        min-height: 1.25rem;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      .answer-panel {
+        margin-top: 1.25rem;
+      }
+
+      .answer-panel h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+        font-weight: 650;
+      }
+
+      #answer {
+        min-height: 180px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.65;
+        font-size: 0.98rem;
+      }
+
+      #answer:empty::before {
+        content: '回答会流式显示在这里…';
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>SSE Chat 测试</h1>
+      <p class="subtitle">调用 <code>/ai/chat/stream</code>，流式展示模型回答</p>
+
+      <section class="panel">
+        <label for="question">问题</label>
+        <textarea id="question" placeholder="输入你的问题，例如：用一句话介绍 NestJS"></textarea>
+        <div class="actions">
+          <button id="askBtn" class="primary" type="button">查询</button>
+          <button id="stopBtn" class="secondary" type="button" disabled>停止</button>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+
+      <section class="panel answer-panel">
+        <h2>回答</h2>
+        <div id="answer"></div>
+      </section>
+    </main>
+
+    <script>
+      const questionEl = document.getElementById('question');
+      const answerEl = document.getElementById('answer');
+      const statusEl = document.getElementById('status');
+      const askBtn = document.getElementById('askBtn');
+      const stopBtn = document.getElementById('stopBtn');
+
+      let eventSource = null;
+
+      function setBusy(busy) {
+        askBtn.disabled = busy;
+        stopBtn.disabled = !busy;
+        questionEl.disabled = busy;
+      }
+
+      function setStatus(text, isError = false) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle('error', isError);
+      }
+
+      function parseChunk(raw) {
+        if (raw == null) return '';
+        try {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed === 'string') return parsed;
+          if (parsed && typeof parsed === 'object' && 'data' in parsed) {
+            return typeof parsed.data === 'string' ? parsed.data : JSON.stringify(parsed.data);
+          }
+          return typeof parsed === 'object' ? JSON.stringify(parsed) : String(parsed);
+        } catch {
+          return String(raw);
+        }
+      }
+
+      function stopStream() {
+        if (eventSource) {
+          eventSource.close();
+          eventSource = null;
+        }
+        setBusy(false);
+      }
+
+      function ask() {
+        const question = questionEl.value.trim();
+        if (!question) {
+          setStatus('请先输入问题', true);
+          questionEl.focus();
+          return;
+        }
+
+        stopStream();
+        answerEl.textContent = '';
+        setBusy(true);
+        setStatus('连接中…');
+
+        const url = `/ai/chat/stream?question=${encodeURIComponent(question)}`;
+        eventSource = new EventSource(url);
+
+        eventSource.onopen = () => {
+          setStatus('流式输出中…');
+        };
+
+        eventSource.onmessage = (event) => {
+          answerEl.textContent += parseChunk(event.data);
+        };
+
+        eventSource.onerror = () => {
+          // 正常结束时浏览器也会触发 error，此时 readyState 为 CLOSED
+          if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+            setStatus(answerEl.textContent ? '完成' : '已结束（无内容）');
+          } else {
+            setStatus('连接失败或中断', true);
+          }
+          stopStream();
+        };
+      }
+
+      askBtn.addEventListener('click', ask);
+      stopBtn.addEventListener('click', () => {
+        stopStream();
+        setStatus('已停止');
+      });
+
+      questionEl.addEventListener('keydown', (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          event.preventDefault();
+          ask();
+        }
+      });
+    </script>
+  </body>
+</html>
