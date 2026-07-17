@@ -13,6 +13,7 @@ import {
 } from '@langchain/core/messages';
 import { z } from 'zod';
 import { Runnable } from '@langchain/core/runnables';
+import { Tool } from '@langchain/core/tools';
 
 const database = {
   users: {
@@ -45,28 +46,31 @@ type QueryUserArgs = {
   userId: string;
 };
 
-const queryUserTool = tool(
-  async ({ userId }: QueryUserArgs) => {
-    const user = database.users[userId];
-    if (!user) {
-      return `用户不存在: ${userId}`;
-    }
-    // ToolMessage.content 必须是 string，不能直接传对象
-    return JSON.stringify(user);
-  },
-  {
-    name: 'queryUser',
-    description: '查询用户信息',
-    schema: queryUserArgsSchema,
-  },
-);
+// const queryUserTool = tool(
+//   async ({ userId }: QueryUserArgs) => {
+//     const user = database.users[userId];
+//     if (!user) {
+//       return `用户不存在: ${userId}`;
+//     }
+//     // ToolMessage.content 必须是 string，不能直接传对象
+//     return JSON.stringify(user);
+//   },
+//   {
+//     name: 'queryUser',
+//     description: '查询用户信息',
+//     schema: queryUserArgsSchema,
+//   },
+// );
 
 @Injectable()
 export class AiCornService {
   private readonly modelWithTools: Runnable<BaseMessage[], AIMessage>;
 
-  constructor(@Inject('CHAT_MODEL') private chatModel: ChatOpenAI) {
-    this.modelWithTools = this.chatModel.bindTools([queryUserTool]);
+  constructor(
+    @Inject('CHAT_MODEL') private chatModel: ChatOpenAI,
+    @Inject('QUERY_USER_TOOL') private queryUserTool: Tool,
+  ) {
+    this.modelWithTools = this.chatModel.bindTools([this.queryUserTool]);
   }
 
   async runChain(query: string) {
@@ -89,7 +93,7 @@ export class AiCornService {
 
         if (toolName === 'queryUser') {
           const args = queryUserArgsSchema.parse(toolCall.args);
-          const result = await queryUserTool.invoke({ userId: args.userId });
+          const result = await this.queryUserTool.invoke({ userId: args.userId });
           messages.push(
             new ToolMessage({
               tool_call_id: toolCallId || '',
@@ -127,26 +131,19 @@ export class AiCornService {
         return;
       }
 
-      // 流结束后只 push 一条完整 AIMessage，不能把 chunk 直接塞进 messages
-      const aiMessage = new AIMessage({
-        content: fullAIMessage.content,
-        tool_calls: fullAIMessage.tool_calls,
-        additional_kwargs: fullAIMessage.additional_kwargs,
-        response_metadata: fullAIMessage.response_metadata,
-      });
-      messages.push(aiMessage);
+      messages.push(fullAIMessage);
 
-      if (!aiMessage.tool_calls?.length) {
+      if (!fullAIMessage.tool_calls?.length) {
         return;
       }
 
-      for (const toolCall of aiMessage.tool_calls) {
+      for (const toolCall of fullAIMessage.tool_calls) {
         const toolCallId = toolCall.id;
         const toolName = toolCall.name;
 
         if (toolName === 'queryUser') {
           const args = queryUserArgsSchema.parse(toolCall.args);
-          const result = await queryUserTool.invoke({ userId: args.userId });
+          const result = await this.queryUserTool.invoke({ userId: args.userId });
           messages.push(
             new ToolMessage({
               tool_call_id: toolCallId || '',
