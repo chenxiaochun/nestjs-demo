@@ -25,5 +25,6 @@ import { ChatOpenAI } from '@langchain/openai';
       inject: [ConfigService],
     },
   ],
+  exports: ['CHAT_MODEL'],
 })
 export class AiModule {}
