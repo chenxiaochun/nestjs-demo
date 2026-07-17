@@ -5,6 +5,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
 import {
   AIMessage,
+  AIMessageChunk,
   ToolMessage,
   HumanMessage,
   SystemMessage,
@@ -80,6 +81,63 @@ export class AiCornService {
 
       if (!aiMessage.tool_calls?.length) {
         return aiMessage.content;
+      }
+
+      for (const toolCall of aiMessage.tool_calls) {
+        const toolCallId = toolCall.id;
+        const toolName = toolCall.name;
+
+        if (toolName === 'queryUser') {
+          const args = queryUserArgsSchema.parse(toolCall.args);
+          const result = await queryUserTool.invoke({ userId: args.userId });
+          messages.push(
+            new ToolMessage({
+              tool_call_id: toolCallId || '',
+              name: toolName,
+              content: typeof result === 'string' ? result : JSON.stringify(result),
+            }),
+          );
+        }
+      }
+    }
+  }
+
+  async *runChainStream(query: string) {
+    const messages: BaseMessage[] = [
+      new SystemMessage('你是一个助手，负责查询用户信息'),
+      new HumanMessage(query),
+    ];
+
+    while (true) {
+      const stream = await this.modelWithTools.stream(messages);
+      let fullAIMessage: AIMessageChunk | null = null;
+
+      for await (const chunk of stream) {
+        const messageChunk = chunk as AIMessageChunk;
+        fullAIMessage = fullAIMessage ? fullAIMessage.concat(messageChunk) : messageChunk;
+
+        const hasToolCallChunk = !!messageChunk.tool_call_chunks?.length;
+
+        if (!hasToolCallChunk && messageChunk.content) {
+          yield messageChunk.content;
+        }
+      }
+
+      if (!fullAIMessage) {
+        return;
+      }
+
+      // 流结束后只 push 一条完整 AIMessage，不能把 chunk 直接塞进 messages
+      const aiMessage = new AIMessage({
+        content: fullAIMessage.content,
+        tool_calls: fullAIMessage.tool_calls,
+        additional_kwargs: fullAIMessage.additional_kwargs,
+        response_metadata: fullAIMessage.response_metadata,
+      });
+      messages.push(aiMessage);
+
+      if (!aiMessage.tool_calls?.length) {
+        return;
       }
 
       for (const toolCall of aiMessage.tool_calls) {
