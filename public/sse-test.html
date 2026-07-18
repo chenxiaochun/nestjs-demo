@@ -158,11 +158,11 @@
   <body>
     <main>
       <h1>SSE Chat 测试</h1>
-      <p class="subtitle">调用 <code>/ai/chat/stream</code>，流式展示模型回答</p>
+      <p class="subtitle">调用 <code>/ai-corn/chat/stream</code>（含 web_search 等工具），流式展示模型回答</p>
 
       <section class="panel">
         <label for="question">问题</label>
-        <textarea id="question" placeholder="输入你的问题，例如：用一句话介绍 NestJS"></textarea>
+        <textarea id="question" placeholder="输入你的问题，例如：帮我搜索 2026 年 AI 资讯"></textarea>
         <div class="actions">
           <button id="askBtn" class="primary" type="button">查询</button>
           <button id="stopBtn" class="secondary" type="button" disabled>停止</button>
@@ -231,7 +231,7 @@
         setBusy(true);
         setStatus('连接中…');
 
-        const url = `/ai/chat/stream?question=${encodeURIComponent(question)}`;
+        const url = `/ai-corn/chat/stream?query=${encodeURIComponent(question)}`;
         eventSource = new EventSource(url);
 
         eventSource.onopen = () => {
@@ -243,9 +243,12 @@
         };
 
         eventSource.onerror = () => {
-          // 正常结束时浏览器也会触发 error，此时 readyState 为 CLOSED
-          if (eventSource && eventSource.readyState === EventSource.CLOSED) {
-            setStatus(answerEl.textContent ? '完成' : '已结束（无内容）');
+          // EventSource 在流正常结束后也会触发 error，并可能尝试重连
+          const hasAnswer = Boolean(answerEl.textContent.trim());
+          if (hasAnswer) {
+            setStatus('完成');
+          } else if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+            setStatus('已结束（无内容）');
           } else {
             setStatus('连接失败或中断', true);
           }

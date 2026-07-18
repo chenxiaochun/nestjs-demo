@@ -4,10 +4,11 @@ import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
 import { BookModule } from './book/book.module';
 import { AiModule } from './ai/ai.module';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AiCornModule } from './ai-corn/ai-corn.module';
+import { MailerModule } from '@nestjs-modules/mailer';
 
 @Module({
   imports: [
@@ -22,6 +23,24 @@ import { AiCornModule } from './ai-corn/ai-corn.module';
       rootPath: join(__dirname, '..', 'public'),
     }),
     AiCornModule,
+    MailerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        transport: {
+          host: configService.get<string>('MAIL_HOST'),
+          port: Number(configService.get('MAIL_PORT')),
+          secure: false,
+          family: 4,
+          auth: {
+            user: configService.get<string>('MAIL_USER'),
+            pass: configService.get<string>('MAIL_PASS'),
+          },
+        },
+        defaults: {
+          from: configService.get<string>('MAIL_FROM'),
+        },
+      }),
+    }),
   ],
   controllers: [AppController],
   providers: [AppService],
