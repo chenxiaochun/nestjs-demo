@@ -15,6 +15,7 @@ import { ScheduleModule, SchedulerRegistry, CronExpression } from '@nestjs/sched
 import { CronJob } from 'cron';
 import { JobModule } from './job/job.module';
 import { Job } from './job/entities/job.entity';
+import { ToolModule } from './tool/tool.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { Job } from './job/entities/job.entity';
     }),
     ScheduleModule.forRoot(),
     JobModule,
+    ToolModule,
   ],
   controllers: [AppController],
   providers: [AppService],
