@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Inject, Module, OnApplicationBootstrap } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './user/user.module';
@@ -11,6 +11,10 @@ import { AiCornModule } from './ai-corn/ai-corn.module';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './user/entities/user.entity';
+import { ScheduleModule, SchedulerRegistry, CronExpression } from '@nestjs/schedule';
+import { CronJob } from 'cron';
+import { JobModule } from './job/job.module';
+import { Job } from './job/entities/job.entity';
 
 @Module({
   imports: [
@@ -52,13 +56,31 @@ import { User } from './user/entities/user.entity';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [User],
+        entities: [User, Job],
         synchronize: true,
         logging: true,
       }),
     }),
+    ScheduleModule.forRoot(),
+    JobModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements OnApplicationBootstrap {
+  @Inject(SchedulerRegistry)
+  private readonly schedulerRegistry: SchedulerRegistry | undefined;
+
+  async onApplicationBootstrap() {
+    const job1 = new CronJob(CronExpression.EVERY_SECOND, () => {
+      console.log('job1 executed');
+    });
+
+    this.schedulerRegistry?.addCronJob('job1', job1);
+    job1.start();
+
+    setTimeout(() => {
+      job1.stop();
+    }, 5000);
+  }
+}

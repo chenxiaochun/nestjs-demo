@@ -35,6 +35,11 @@ const SYSTEM_PROMPT = [
   '4. sendMail 的 html 必须包含真实搜索内容（标题、链接、摘要），禁止空正文或只有一句话说明。',
   '5. 收件人邮箱 ≠ 用户ID；不要把邮箱当成 userId。',
   '6. 涉及新闻、实时信息时必须使用 web_search，不要凭空编造。',
+  '7. cronJob：定时任务。add / list / toggle。',
+  '   - add 必填：type、instruction。',
+  '   - type=cron 再填 corn；type=every 再填 everyMs；type=at 再填 at（ISO 时间）。三类字段不要同时填。',
+  '   - 「N 秒/分钟后提醒」必须用 type=at，at=当前时间加上延迟后的 ISO 字符串（不要用 every）。',
+  '   - list 无需其它参数；toggle 只需 id。',
 ].join('\n');
 
 @Injectable()
@@ -47,12 +52,14 @@ export class AiCornService {
     @Inject('SEND_MAIL_TOOL') private sendMailTool: Tool,
     @Inject('WEB_SEARCH_TOOL') private webSearchTool: Tool,
     @Inject('DB_USER_CRUD_TOOL') private dbUserCrudTool: Tool,
+    @Inject('CRON_JOB_TOOL') private cronJobTool: Tool,
   ) {
     this.modelWithTools = this.chatModel.bindTools([
       this.queryUserTool,
       this.sendMailTool,
       this.webSearchTool,
       this.dbUserCrudTool,
+      this.cronJobTool,
     ]);
   }
 
@@ -132,6 +139,9 @@ export class AiCornService {
       } else if (toolName === 'dbUserCrud') {
         content = this.toToolContent(await this.dbUserCrudTool.invoke(toolCall.args));
         yield `\n===== 数据库用户操作结果 =====\n${content}\n==================\n`;
+      } else if (toolName === 'cronJob') {
+        content = this.toToolContent(await this.cronJobTool.invoke(toolCall.args));
+        yield `\n===== 定时任务操作结果 =====\n${content}\n==================\n`;
       } else {
         content = `未知工具: ${toolName}`;
       }
