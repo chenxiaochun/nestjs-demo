@@ -1,71 +1,36 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-
-type User = {
-  name: string;
-  age: number;
-  email: string;
-  phone: string;
-};
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { EntityManager } from 'typeorm';
+import { CreateUserDto } from './dto/create-user.dto';
+import { User as UserEntity } from './entities/user.entity';
 
 @Injectable()
 export class UserService {
-  private readonly users = new Map<string, User>([
-    [
-      '001',
-      {
-        name: '张三',
-        age: 18,
-        email: 'zhangsan@gmail.com',
-        phone: '1234567890',
-      },
-    ],
-    [
-      '002',
-      {
-        name: '李四',
-        age: 20,
-        email: 'lisi@gmail.com',
-        phone: '1234567890',
-      },
-    ],
-    [
-      '003',
-      {
-        name: '王五',
-        age: 22,
-        email: 'wangwu@gmail.com',
-        phone: '1234567890',
-      },
-    ],
-    [
-      '004',
-      {
-        name: '赵六',
-        age: 24,
-        email: 'zhaoliu@gmail.com',
-        phone: '1234567890',
-      },
-    ],
-  ]);
+  @Inject(EntityManager)
+  private readonly entityManager!: EntityManager;
 
-  findAll(): User[] {
-    return Array.from(this.users.values());
+  create(createUserDto: CreateUserDto) {
+    const user = this.entityManager.create(UserEntity, createUserDto);
+    return this.entityManager.save(user);
   }
 
-  findOne(id: string) {
-    return this.users.get(id);
+  findAll() {
+    return this.entityManager.find(UserEntity);
   }
 
-  update(id: string, partial: Omit<User, 'id'>) {
-    const user = this.users.get(id);
+  findOne(id: number) {
+    return this.entityManager.findOne(UserEntity, { where: { id } });
+  }
+
+  update(id: number, partial: Omit<UserEntity, 'id'>) {
+    const user = this.entityManager.findOne(UserEntity, { where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    this.users.set(id, { ...user, ...partial });
-    return this.users.get(id);
+    this.entityManager.update(UserEntity, { id }, partial);
+    return this.entityManager.findOne(UserEntity, { where: { id } });
   }
 
-  remove(id: string) {
-    return this.users.delete(id);
+  remove(id: number) {
+    return this.entityManager.delete(UserEntity, { id });
   }
 }

@@ -46,11 +46,13 @@ export class AiCornService {
     @Inject('QUERY_USER_TOOL') private queryUserTool: Tool,
     @Inject('SEND_MAIL_TOOL') private sendMailTool: Tool,
     @Inject('WEB_SEARCH_TOOL') private webSearchTool: Tool,
+    @Inject('DB_USER_CRUD_TOOL') private dbUserCrudTool: Tool,
   ) {
     this.modelWithTools = this.chatModel.bindTools([
       this.queryUserTool,
       this.sendMailTool,
       this.webSearchTool,
+      this.dbUserCrudTool,
     ]);
   }
 
@@ -103,9 +105,7 @@ export class AiCornService {
 
       if (toolName === 'queryUser') {
         const args = queryUserArgsSchema.parse(toolCall.args);
-        content = this.toToolContent(
-          await this.queryUserTool.invoke({ userId: args.userId }),
-        );
+        content = this.toToolContent(await this.queryUserTool.invoke({ userId: args.userId }));
       } else if (toolName === 'sendMail') {
         const args = toolCall.args as {
           to?: string;
@@ -126,11 +126,12 @@ export class AiCornService {
           content = this.toToolContent(await this.sendMailTool.invoke(toolCall.args));
         }
       } else if (toolName === 'web_search') {
-        content = this.toToolContent(
-          await this.webSearchTool.invoke(toolCall.args),
-        );
+        content = this.toToolContent(await this.webSearchTool.invoke(toolCall.args));
         // 把搜索结果推给前端流式展示
         yield `\n===== 搜索结果 =====\n${content}\n==================\n`;
+      } else if (toolName === 'dbUserCrud') {
+        content = this.toToolContent(await this.dbUserCrudTool.invoke(toolCall.args));
+        yield `\n===== 数据库用户操作结果 =====\n${content}\n==================\n`;
       } else {
         content = `未知工具: ${toolName}`;
       }
@@ -174,9 +175,7 @@ export class AiCornService {
 
       for await (const chunk of stream) {
         const messageChunk = chunk as AIMessageChunk;
-        fullAIMessage = fullAIMessage
-          ? fullAIMessage.concat(messageChunk)
-          : messageChunk;
+        fullAIMessage = fullAIMessage ? fullAIMessage.concat(messageChunk) : messageChunk;
 
         const hasToolCallChunk = !!messageChunk.tool_call_chunks?.length;
 

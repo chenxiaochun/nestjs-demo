@@ -8,6 +8,7 @@ import { tool } from '@langchain/core/tools';
 import { UserModule } from 'src/user/user.module';
 import { MailerService } from '@nestjs-modules/mailer';
 import { ConfigService } from '@nestjs/config';
+import { User } from 'src/user/entities/user.entity';
 
 @Module({
   imports: [AiModule, UserModule],
@@ -22,7 +23,7 @@ import { ConfigService } from '@nestjs/config';
         });
 
         return tool(
-          async ({ userId }: { userId: string }) => {
+          async ({ userId }: { userId: number }) => {
             const user = userService.findOne(userId);
             if (!user) {
               return '用户不存在';
@@ -49,10 +50,7 @@ import { ConfigService } from '@nestjs/config';
             .string()
             .optional()
             .describe('可选。仅当要发送系统内用户资料时传入用户ID（如 001），不是邮箱'),
-          html: z
-            .string()
-            .optional()
-            .describe('可选。HTML 正文，例如搜索结果整理成的 HTML'),
+          html: z.string().optional().describe('可选。HTML 正文，例如搜索结果整理成的 HTML'),
           text: z.string().optional().describe('可选。纯文本正文'),
         });
 
@@ -66,7 +64,7 @@ import { ConfigService } from '@nestjs/config';
           }: {
             to: string;
             subject: string;
-            userId?: string;
+            userId?: number;
             html?: string;
             text?: string;
           }) => {
@@ -76,16 +74,17 @@ import { ConfigService } from '@nestjs/config';
 
             // 发用户资料：按 userId 查库组装正文
             if (userId) {
-              const user = userService.findOne(userId);
+              const user = await userService.findOne(userId);
               if (!user) {
                 return `用户不存在: ${userId}，邮件未发送。若只是发任意内容到邮箱，请改用 html/text，不要传 userId。`;
               }
               const userText = [
                 `用户 ${userId} 的信息如下：`,
                 `姓名：${user.name}`,
-                `年龄：${user.age}`,
                 `邮箱：${user.email}`,
-                `电话：${user.phone}`,
+                `出生日期：${user.createdAt}`,
+                `创建日期：${user.createdAt}`,
+                `更新日期：${user.updatedAt}`,
               ].join('\n');
               await mailerService.sendMail({
                 to,
@@ -165,12 +164,7 @@ import { ConfigService } from '@nestjs/config';
               }
               return webPages
                 .map(
-                  (page: {
-                    title?: string;
-                    url?: string;
-                    summary?: string;
-                    siteName?: string;
-                  }) =>
+                  (page: { title?: string; url?: string; summary?: string; siteName?: string }) =>
                     [
                       `标题：${page.title ?? ''}`,
                       `URL: ${page.url ?? ''}`,
@@ -188,6 +182,75 @@ import { ConfigService } from '@nestjs/config';
             description:
               '搜索互联网上的信息。适用于新闻、天气、实时资讯、公开网页内容等需要联网查询的问题。',
             schema: webSearchArgsSchema,
+          },
+        );
+      },
+    },
+    {
+      provide: 'DB_USER_CRUD_TOOL',
+      inject: [UserService],
+      useFactory: (userService: UserService) => {
+        const dbUserCrudArgsSchema = z.object({
+          action: z
+            .enum(['create', 'list', 'update', 'delete'])
+            .describe('操作类型,create:创建用户,list:查询用户列表,update:更新用户,delete:删除用户'),
+          id: z.number().optional().describe('用户ID,仅在update和delete时需要'),
+          name: z.string().optional().describe('用户姓名,仅在create和update时需要'),
+          email: z.string().optional().describe('用户邮箱,仅在create和update时需要'),
+        });
+
+        return tool(
+          async ({ action, id, name, email }: z.infer<typeof dbUserCrudArgsSchema>) => {
+            switch (action) {
+              case 'create':
+                if (!name || !email) {
+                  return '创建用户失败: 缺少姓名或邮箱';
+                }
+                const created = await userService.create({ name, email });
+                if (created) {
+                  return `用户创建成功: ${created.id}，姓名: ${created.name}，邮箱: ${created.email}`;
+                }
+              case 'list':
+                const users = await userService.findAll();
+                if (users.length > 0) {
+                  return users
+                    .map((user) => `用户ID: ${user.id}，姓名: ${user.name}，邮箱: ${user.email}`)
+                    .join('\n');
+                }
+              case 'update':
+                if (!id || !name || !email) {
+                  return '更新用户失败: 缺少用户ID或姓名或邮箱';
+                }
+
+                const user = await userService.findOne(id);
+                const payload = {
+                  ...user,
+                  name,
+                  email,
+                };
+
+                const updated = await userService.update(id, payload as Omit<User, 'id'>);
+                if (updated) {
+                  return `用户更新成功: ${updated.id}，姓名: ${updated.name}，邮箱: ${updated.email}`;
+                }
+                return '更新用户失败: 用户不存在';
+
+              case 'delete':
+                if (!id) {
+                  return '删除用户失败: 缺少用户ID';
+                }
+                const deleted = await userService.remove(id);
+                if (deleted) {
+                  return `用户删除成功: ${id}`;
+                }
+                return '删除用户失败: 用户不存在';
+            }
+          },
+          {
+            name: 'dbUserCrud',
+            description:
+              '数据库用户操作工具,create:创建用户,list:查询用户列表,update:更新用户,delete:删除用户',
+            schema: dbUserCrudArgsSchema,
           },
         );
       },

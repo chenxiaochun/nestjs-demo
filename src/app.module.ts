@@ -9,6 +9,8 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { AiCornModule } from './ai-corn/ai-corn.module';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from './user/entities/user.entity';
 
 @Module({
   imports: [
@@ -39,6 +41,20 @@ import { MailerModule } from '@nestjs-modules/mailer';
         defaults: {
           from: configService.get<string>('MAIL_FROM'),
         },
+      }),
+    }),
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'mysql',
+        host: configService.get<string>('DB_HOST'),
+        port: Number(configService.get('DB_PORT')),
+        username: configService.get<string>('DB_USER'),
+        password: configService.get<string>('DB_PASS'),
+        database: configService.get<string>('DB_NAME'),
+        entities: [User],
+        synchronize: true,
+        logging: true,
       }),
     }),
   ],
