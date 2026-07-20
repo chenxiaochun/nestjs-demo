@@ -47,7 +47,7 @@ export class AiCornService {
   private readonly modelWithTools: Runnable<BaseMessage[], AIMessage>;
 
   constructor(
-    @Inject('CHAT_MODEL') private chatModel: ChatOpenAI,
+    @Inject('CHAT_MODEL_TOOL') private chatModel: ChatOpenAI,
     @Inject('QUERY_USER_TOOL') private queryUserTool: Tool,
     @Inject('SEND_MAIL_TOOL') private sendMailTool: Tool,
     @Inject('WEB_SEARCH_TOOL') private webSearchTool: Tool,

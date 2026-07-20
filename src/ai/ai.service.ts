@@ -10,7 +10,7 @@ import { StringOutputParser } from '@langchain/core/output_parsers';
 export class AiService {
   private readonly chain: Runnable;
 
-  constructor(@Inject('CHAT_MODEL') private chatModel: ChatOpenAI) {
+  constructor(@Inject('CHAT_MODEL_TOOL') private chatModel: ChatOpenAI) {
     const prompt = PromptTemplate.fromTemplate('请回答以下问题\n\n{question}');
     this.chain = prompt.pipe(this.chatModel).pipe(new StringOutputParser());
   }

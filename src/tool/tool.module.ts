@@ -6,6 +6,8 @@ import { CronJobToolService } from './corn-job-tool.service';
 import { DbUserCrudService } from './db-user-crud.service';
 import { QueryUserToolService } from './query-user-tool.service';
 import { JobModule } from 'src/job/job.module';
+import { ChatModelToolService } from './chat-model-tool.service';
+
 @Module({
   imports: [UserModule, JobModule],
   providers: [
@@ -14,6 +16,14 @@ import { JobModule } from 'src/job/job.module';
     CronJobToolService,
     QueryUserToolService,
     DbUserCrudService,
+    ChatModelToolService,
+    {
+      provide: 'CHAT_MODEL_TOOL',
+      useFactory: (chatModelToolService: ChatModelToolService) => {
+        return chatModelToolService.tool;
+      },
+      inject: [ChatModelToolService],
+    },
     {
       provide: 'SEND_MAIL_TOOL',
       useFactory: (sendMailToolService: SendMailToolService) => {
@@ -51,6 +61,7 @@ import { JobModule } from 'src/job/job.module';
     },
   ],
   exports: [
+    'CHAT_MODEL_TOOL',
     'SEND_MAIL_TOOL',
     'WEB_SEARCH_TOOL',
     'CRON_JOB_TOOL',
