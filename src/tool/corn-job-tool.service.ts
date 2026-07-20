@@ -25,7 +25,9 @@ export class CronJobToolService {
       instruction: z
         .string()
         .optional()
-        .describe('任务描述/提醒内容，如「提醒我喝水」。add 时必填'),
+        .describe(
+          '任务描述，到点后由 Agent 原样执行。必须包含完整信息（邮箱、动作、内容），如「向 470427826@qq.com 发送一则笑话邮件」',
+        ),
       corn: z.string().optional().describe('cron 表达式，仅 type=cron 时需要，如 "0 9 * * *"'),
       everyMs: z
         .number()

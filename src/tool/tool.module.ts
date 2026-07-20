@@ -8,9 +8,10 @@ import { QueryUserToolService } from './query-user-tool.service';
 import { JobModule } from 'src/job/job.module';
 import { ChatModelToolService } from './chat-model-tool.service';
 import { TimeNowToolService } from './time-now-tool.service';
+import { forwardRef } from '@nestjs/common';
 
 @Module({
-  imports: [UserModule, JobModule],
+  imports: [UserModule, forwardRef(() => JobModule)],
   providers: [
     SendMailToolService,
     WebSearchToolService,

@@ -40,6 +40,8 @@ const SYSTEM_PROMPT = [
   '   - add 必填：type、instruction。',
   '   - type=cron 再填 corn；type=every 再填 everyMs；type=at 再填 at 或 delayMs（二选一）。',
   '   - 「N 秒/分钟后提醒」流程：第一轮只调用 timeNow；第二轮调用 cronJob(type=at, instruction, delayMs=N毫秒)。',
+  '   - instruction 必须是可独立执行的完整指令：包含动作、对象、邮箱、内容要求等全部关键信息。',
+  '     例：「向 470427826@qq.com 发送一则笑话邮件」；禁止写成「发送笑话到指定邮箱」这种缺邮箱的摘要。',
   '   - 禁止用模型训练数据里的旧日期；相对时间必须基于 timeNow 或 delayMs。',
   '   - list 无需其它参数；toggle 只需 id。',
 ].join('\n');
@@ -81,10 +83,6 @@ export class AiCornService {
     return JSON.stringify(result);
   }
 
-  /**
-   * 执行本轮 tool_calls。
-   * 若同轮同时出现 web_search + sendMail，则拒绝发信，迫使模型下一轮再发。
-   */
   private async *handleToolCalls(
     toolCalls: NonNullable<AIMessage['tool_calls']>,
     messages: BaseMessage[],
@@ -97,7 +95,6 @@ export class AiCornService {
 
       yield `\n[进度] 正在执行 ${toolName}…\n`;
 
-      // 同轮既搜索又发信：发信参数里还没有搜索结果，必须拒绝
       if (toolName === 'sendMail' && hasWebSearch) {
         const reject =
           '同一轮不能同时 web_search 和 sendMail。请先查看搜索结果，再单独调用 sendMail，并传入包含完整搜索内容的 html。本次未发送邮件。';
@@ -125,7 +122,6 @@ export class AiCornService {
           text?: string;
           userId?: string;
         };
-        // 通用发信时正文太短，视为无效，避免空邮件
         if (
           !args.userId &&
           !(args.html && args.html.trim().length > 80) &&
@@ -138,7 +134,6 @@ export class AiCornService {
         }
       } else if (toolName === 'web_search') {
         content = this.toToolContent(await this.webSearchTool.invoke(toolCall.args));
-        // 把搜索结果推给前端流式展示
         yield `\n===== 搜索结果 =====\n${content}\n==================\n`;
       } else if (toolName === 'dbUserCrud') {
         content = this.toToolContent(await this.dbUserCrudTool.invoke(toolCall.args));
@@ -176,7 +171,6 @@ export class AiCornService {
         return aiMessage.content;
       }
 
-      // 消费 generator，但不对外流式
       for await (const _ of this.handleToolCalls(aiMessage.tool_calls, messages)) {
         // no-op
       }

@@ -3,6 +3,7 @@ import { EntityManager } from 'typeorm';
 import { Job as JobEntity } from './entities/job.entity';
 import { CronJob } from 'cron';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { JobAgentService } from 'src/ai-corn/job-agent.service';
 
 @Injectable()
 export class JobService implements OnApplicationBootstrap {
@@ -13,6 +14,9 @@ export class JobService implements OnApplicationBootstrap {
 
   @Inject(SchedulerRegistry)
   private readonly schedulerRegistry!: SchedulerRegistry;
+
+  @Inject(JobAgentService)
+  private readonly jobAgentService!: JobAgentService;
 
   async onApplicationBootstrap() {
     const enabledJobs = await this.entityManager.find(JobEntity, {
@@ -106,13 +110,36 @@ export class JobService implements OnApplicationBootstrap {
     return saved;
   }
 
-  /** 按任务类型注册到 SchedulerRegistry，并在触发时更新 lastRun */
+  /** 按任务类型注册到 SchedulerRegistry；触发时执行 instruction（如发邮件） */
   async startRunTime(job: JobEntity) {
     const name = String(job.id);
 
     const onTick = async () => {
       await this.entityManager.update(JobEntity, { id: job.id }, { lastRun: new Date() });
-      this.logger.log(`Job ${name} executed: ${job.instruction}`);
+      this.logger.log(`Job ${name} triggered: ${job.instruction}`);
+      try {
+        const result = await this.jobAgentService.runJob(job.instruction);
+        this.logger.log(`Job ${name} agent result: ${result}`);
+      } catch (error) {
+        this.logger.error(
+          `Job ${name} agent failed: ${error instanceof Error ? error.message : String(error)}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+
+      // 一次性 at 任务执行后关闭，避免重启后再次触发
+      if (job.type === 'at') {
+        await this.entityManager.update(
+          JobEntity,
+          { id: job.id },
+          { isEnabled: false, updatedAt: new Date() },
+        );
+        try {
+          this.schedulerRegistry.deleteTimeout(name);
+        } catch {
+          // timeout 可能已自然结束
+        }
+      }
     };
 
     if (job.type === 'cron') {
@@ -146,7 +173,13 @@ export class JobService implements OnApplicationBootstrap {
       }
       const delay = new Date(job.at).getTime() - Date.now();
       if (delay <= 0) {
-        await onTick();
+        // 已过期的 at 任务：启动时不再执行，直接禁用（避免历史测试任务狂发邮件）
+        await this.entityManager.update(
+          JobEntity,
+          { id: job.id },
+          { isEnabled: false, updatedAt: new Date() },
+        );
+        this.logger.warn(`Skipped overdue at-job ${name}, disabled`);
         return;
       }
       const timeoutId = setTimeout(() => {
