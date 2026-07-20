@@ -34,8 +34,12 @@ export class CronJobToolService {
       at: z
         .string()
         .optional()
+        .describe('执行时间 ISO 字符串，仅 type=at 时可选（与 delayMs 二选一）'),
+      delayMs: z
+        .number()
+        .optional()
         .describe(
-          '执行时间 ISO 字符串，仅 type=at 时需要。例如 10 秒后：把当前时间加 10 秒后的 ISO 时间传入',
+          '延迟毫秒，仅 type=at 时可选（与 at 二选一）。例如 30 分钟后传 1800000，由服务器按当前时间计算',
         ),
     });
 
@@ -48,6 +52,7 @@ export class CronJobToolService {
         corn,
         everyMs,
         at,
+        delayMs,
       }: z.infer<typeof cronJobArgsSchema>) => {
         switch (action) {
           case 'add': {
@@ -60,22 +65,33 @@ export class CronJobToolService {
             if (type === 'every' && (!everyMs || everyMs <= 0)) {
               return '添加定时任务失败: type=every 时必须提供有效的 everyMs（毫秒）';
             }
-            if (type === 'at' && !at) {
-              return '添加定时任务失败: type=at 时必须提供 at（ISO 时间）';
-            }
-            if (type === 'at' && at && Number.isNaN(new Date(at).getTime())) {
-              return `添加定时任务失败: at 时间格式无效: ${at}`;
+            let runAt: Date | undefined;
+            if (type === 'at') {
+              if (delayMs && delayMs > 0) {
+                runAt = new Date(Date.now() + delayMs);
+              } else if (at) {
+                if (Number.isNaN(new Date(at).getTime())) {
+                  return `添加定时任务失败: at 时间格式无效: ${at}`;
+                }
+                runAt = new Date(at);
+              } else {
+                return '添加定时任务失败: type=at 时必须提供 at（ISO 时间）或 delayMs（延迟毫秒）';
+              }
             }
 
             const createdJob = await this.jobService.addJob({
               type,
               corn,
               everyMs,
-              at: type === 'at' && at ? new Date(at) : undefined,
+              at: runAt,
               instruction: instruction.trim(),
               isEnabled: true,
             });
-            return `定时任务添加成功: ${createdJob.id}，任务类型: ${createdJob.type}，任务描述: ${createdJob.instruction}`;
+            const atInfo =
+              createdJob.type === 'at' && createdJob.at
+                ? `，执行时间: ${createdJob.at.toISOString()}`
+                : '';
+            return `定时任务添加成功: ${createdJob.id}，任务类型: ${createdJob.type}，任务描述: ${createdJob.instruction}${atInfo}`;
           }
           case 'list': {
             const jobs = await this.jobService.lisJobs();
@@ -107,7 +123,7 @@ export class CronJobToolService {
       {
         name: 'cronJob',
         description:
-          '定时任务工具。add：按类型添加任务（三种类型互斥字段：cron→corn，every→everyMs，at→at；均需 instruction）。list：列出任务。toggle：按 id 切换启停。「N秒后提醒」用 type=at + 未来 ISO 时间，不要用 every。',
+          '定时任务工具。add：按类型添加任务（cron→corn，every→everyMs，at→at 或 delayMs；均需 instruction）。list：列出任务。toggle：按 id 切换启停。「N分钟后提醒」优先用 type=at + delayMs（毫秒），由服务器计算执行时间。',
         schema: cronJobArgsSchema,
       },
     );

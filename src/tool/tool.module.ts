@@ -7,6 +7,7 @@ import { DbUserCrudService } from './db-user-crud.service';
 import { QueryUserToolService } from './query-user-tool.service';
 import { JobModule } from 'src/job/job.module';
 import { ChatModelToolService } from './chat-model-tool.service';
+import { TimeNowToolService } from './time-now-tool.service';
 
 @Module({
   imports: [UserModule, JobModule],
@@ -17,12 +18,20 @@ import { ChatModelToolService } from './chat-model-tool.service';
     QueryUserToolService,
     DbUserCrudService,
     ChatModelToolService,
+    TimeNowToolService,
     {
       provide: 'CHAT_MODEL_TOOL',
       useFactory: (chatModelToolService: ChatModelToolService) => {
         return chatModelToolService.tool;
       },
       inject: [ChatModelToolService],
+    },
+    {
+      provide: 'TIME_NOW_TOOL',
+      useFactory: (timeNowToolService: TimeNowToolService) => {
+        return timeNowToolService.tool;
+      },
+      inject: [TimeNowToolService],
     },
     {
       provide: 'SEND_MAIL_TOOL',
@@ -67,6 +76,7 @@ import { ChatModelToolService } from './chat-model-tool.service';
     'CRON_JOB_TOOL',
     'DB_USER_CRUD_TOOL',
     'QUERY_USER_TOOL',
+    'TIME_NOW_TOOL',
   ],
 })
 export class ToolModule {}
