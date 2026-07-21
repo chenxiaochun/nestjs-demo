@@ -1,98 +1,136 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# nestjs-demo
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+基于 NestJS 的演示项目，集成 LangChain Agent、MySQL、邮件与定时任务，用于探索 AI 工具调用与后端业务结合。
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 功能概览
 
-## Description
+| 模块 | 说明 |
+|------|------|
+| `user` | 用户 CRUD（TypeORM + MySQL） |
+| `book` | 图书 CRUD 示例 |
+| `ai` | 简单 LLM 问答（普通 / SSE 流式） |
+| `ai-corn` | 带工具的 Agent：查用户、发邮件、联网搜索、定时任务、获取当前时间 |
+| `job` | 定时任务持久化与调度 |
+| `tool` | LangChain Tools 封装，供 Agent 调用 |
+| `public` | 静态资源（含 SSE 调试页） |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 技术栈
 
-## Project setup
+- NestJS 11 + TypeScript
+- TypeORM + MySQL
+- LangChain（OpenAI 兼容接口）
+- `@nestjs/schedule` 定时任务
+- `@nestjs-modules/mailer` 邮件
+- Webpack HMR 开发热更新
+- oxlint / oxfmt
 
-```bash
-$ pnpm install
-```
+## 环境要求
 
-## Compile and run the project
+- Node.js 18+
+- pnpm
+- MySQL
 
-```bash
-# development
-$ pnpm run start
+## 快速开始
 
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
-```
-
-## Run tests
+### 1. 安装依赖
 
 ```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
+pnpm install
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 2. 启动
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# 开发（Webpack HMR）
+pnpm run start:dev
+
+# 普通启动
+pnpm run start
+
+# 生产
+pnpm run build
+pnpm run start:prod
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+默认监听 `http://localhost:3000`。
 
-## Resources
+## 主要接口
 
-Check out a few resources that may come in handy when working with NestJS:
+### 用户
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/user` | 用户列表 |
+| GET | `/user/:id` | 用户详情 |
+| POST | `/user` | 创建用户 |
+| PUT | `/user/:id` | 更新用户 |
+| DELETE | `/user/:id` | 删除用户 |
 
-## Support
+### AI 问答
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/ai/chat?question=你好` | 同步问答 |
+| GET | `/ai/chat/stream?question=你好` | SSE 流式问答 |
 
-## Stay in touch
+### AI Agent（工具调用）
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/ai-corn/chat?query=...` | Agent 同步执行 |
+| GET | `/ai-corn/chat/stream?query=...` | Agent SSE 流式执行 |
+
+Agent 可用工具：
+
+- `queryUser` — 按用户 ID 查询
+- `dbUserCrud` — 用户数据库增删改查
+- `sendMail` — 发送邮件
+- `web_search` — 联网搜索（博查）
+- `timeNow` — 当前服务器时间
+- `cronJob` — 添加 / 列表 / 启停定时任务
+
+示例：
+
+```bash
+# 查询用户并说明
+curl "http://localhost:3000/ai-corn/chat?query=查询用户001的信息"
+
+# 搜索并整理成邮件（需配置邮件与搜索 Key）
+curl "http://localhost:3000/ai-corn/chat?query=搜索今天AI新闻，整理成HTML发到you@example.com"
+```
+
+SSE 调试页：启动后访问 `http://localhost:3000/sse-test.html`。
+
+## 脚本
+
+```bash
+pnpm run start:dev    # 开发 + HMR
+pnpm run build        # 编译
+pnpm run start:prod   # 生产运行
+pnpm run lint         # oxlint
+pnpm run lint:fix    # 自动修复
+pnpm run format       # oxfmt
+pnpm run test         # 单元测试
+pnpm run test:e2e     # e2e
+pnpm run test:cov     # 覆盖率
+```
+
+## 目录结构
+
+```
+src/
+├── ai/           # 简单 LLM Chain
+├── ai-corn/      # 带工具的 Agent
+├── book/         # 图书模块示例
+├── job/          # 定时任务
+├── tool/         # LangChain Tools
+├── user/         # 用户模块
+├── app.module.ts
+└── main.ts
+public/
+└── sse-test.html # SSE 调试页
+```
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+UNLICENSED（私有项目）

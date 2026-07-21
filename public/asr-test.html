@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ASR 录音测试</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f4ef;
+        --surface: #fffdf8;
+        --ink: #1c1917;
+        --muted: #78716c;
+        --accent: #0f766e;
+        --accent-hover: #0d9488;
+        --danger: #b91c1c;
+        --recording: #dc2626;
+        --border: #e7e5e4;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+        background:
+          radial-gradient(circle at top left, #d8f3ef 0%, transparent 40%),
+          radial-gradient(circle at bottom right, #f5e6c8 0%, transparent 35%), var(--bg);
+        color: var(--ink);
+      }
+
+      main {
+        width: min(720px, calc(100% - 2rem));
+        margin: 0 auto;
+        padding: 3rem 0 4rem;
+      }
+
+      h1 {
+        margin: 0 0 0.35rem;
+        font-size: 1.75rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+
+      .subtitle {
+        margin: 0 0 1.75rem;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.25rem;
+        box-shadow: 0 10px 30px rgba(28, 25, 23, 0.04);
+      }
+
+      .panel + .panel {
+        margin-top: 1.25rem;
+      }
+
+      .panel h2 {
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+        font-weight: 650;
+      }
+
+      .meter {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        padding: 0.85rem 1rem;
+        border: 1px dashed var(--border);
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--muted);
+        flex-shrink: 0;
+      }
+
+      .dot.live {
+        background: var(--recording);
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.45);
+        animation: pulse 1.2s ease-out infinite;
+      }
+
+      @keyframes pulse {
+        70% {
+          box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+        }
+      }
+
+      .meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+      }
+
+      .meta strong {
+        font-size: 1.05rem;
+      }
+
+      .meta span {
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      button {
+        appearance: none;
+        border: none;
+        border-radius: 999px;
+        padding: 0.7rem 1.25rem;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      button.primary:hover:not(:disabled) {
+        background: var(--accent-hover);
+      }
+
+      button.danger {
+        background: var(--recording);
+        color: #fff;
+      }
+
+      button.secondary {
+        background: transparent;
+        color: var(--muted);
+        border: 1px solid var(--border);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      audio {
+        width: 100%;
+        margin-top: 1rem;
+      }
+
+      .status {
+        margin-top: 0.85rem;
+        min-height: 1.25rem;
+        font-size: 0.875rem;
+        color: var(--muted);
+      }
+
+      .status.error {
+        color: var(--danger);
+      }
+
+      #result {
+        min-height: 120px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.65;
+        font-size: 0.98rem;
+      }
+
+      #result:empty::before {
+        content: '识别结果会显示在这里…';
+        color: var(--muted);
+      }
+
+      code {
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>ASR 录音测试</h1>
+      <p class="subtitle">
+        使用浏览器原生 <code>getUserMedia</code> + <code>MediaRecorder</code> 录音，上传至
+        <code>POST /speech/asr</code>（字段名 <code>audio</code>）
+      </p>
+
+      <section class="panel">
+        <div class="meter">
+          <div id="dot" class="dot"></div>
+          <div class="meta">
+            <strong id="timer">00:00</strong>
+            <span id="hint">点击「开始录音」授权麦克风</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="startBtn" class="primary" type="button">开始录音</button>
+          <button id="stopBtn" class="danger" type="button" disabled>停止录音</button>
+          <button id="recognizeBtn" class="primary" type="button" disabled>识别</button>
+          <button id="clearBtn" class="secondary" type="button" disabled>清空</button>
+        </div>
+
+        <audio id="player" controls hidden></audio>
+        <div id="status" class="status"></div>
+      </section>
+
+      <section class="panel">
+        <h2>识别结果</h2>
+        <div id="result"></div>
+      </section>
+    </main>
+
+    <script>
+      const TARGET_SAMPLE_RATE = 16000;
+
+      const startBtn = document.getElementById('startBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const recognizeBtn = document.getElementById('recognizeBtn');
+      const clearBtn = document.getElementById('clearBtn');
+      const player = document.getElementById('player');
+      const statusEl = document.getElementById('status');
+      const resultEl = document.getElementById('result');
+      const timerEl = document.getElementById('timer');
+      const hintEl = document.getElementById('hint');
+      const dotEl = document.getElementById('dot');
+
+      let mediaStream = null;
+      let mediaRecorder = null;
+      let audioContext = null;
+      let processorNode = null;
+      let sourceNode = null;
+      let chunks = [];
+      let pcmChunks = [];
+      let audioBlob = null;
+      let audioUrl = null;
+      let startedAt = 0;
+      let timerId = null;
+      let chosenMime = '';
+      let useWavFallback = false;
+
+      function setStatus(text, isError = false) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle('error', isError);
+      }
+
+      function formatTime(ms) {
+        const total = Math.floor(ms / 1000);
+        const m = String(Math.floor(total / 60)).padStart(2, '0');
+        const s = String(total % 60).padStart(2, '0');
+        return `${m}:${s}`;
+      }
+
+      function startTimer() {
+        startedAt = Date.now();
+        timerEl.textContent = '00:00';
+        timerId = setInterval(() => {
+          timerEl.textContent = formatTime(Date.now() - startedAt);
+        }, 200);
+      }
+
+      function stopTimer() {
+        if (timerId) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+      }
+
+      function pickMimeType() {
+        // 腾讯云 SentenceRecognition 支持 ogg-opus；Chrome 通常只有 webm
+        const candidates = ['audio/ogg;codecs=opus', 'audio/ogg'];
+        for (const type of candidates) {
+          if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) {
+            return type;
+          }
+        }
+        return '';
+      }
+
+      function revokeUrl() {
+        if (audioUrl) {
+          URL.revokeObjectURL(audioUrl);
+          audioUrl = null;
+        }
+      }
+
+      function setRecordingUi(recording) {
+        startBtn.disabled = recording;
+        stopBtn.disabled = !recording;
+        recognizeBtn.disabled = recording || !audioBlob;
+        clearBtn.disabled = recording || !audioBlob;
+        dotEl.classList.toggle('live', recording);
+        hintEl.textContent = recording
+          ? '录音中…'
+          : audioBlob
+            ? '可试听或点击识别'
+            : '点击「开始录音」授权麦克风';
+      }
+
+      function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
+        if (outputSampleRate === inputSampleRate) {
+          return buffer;
+        }
+        const ratio = inputSampleRate / outputSampleRate;
+        const newLength = Math.round(buffer.length / ratio);
+        const result = new Float32Array(newLength);
+        let offsetResult = 0;
+        let offsetBuffer = 0;
+        while (offsetResult < result.length) {
+          const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
+          let accum = 0;
+          let count = 0;
+          for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+            accum += buffer[i];
+            count++;
+          }
+          result[offsetResult] = accum / count;
+          offsetResult++;
+          offsetBuffer = nextOffsetBuffer;
+        }
+        return result;
+      }
+
+      function encodeWav(samples, sampleRate) {
+        const buffer = new ArrayBuffer(44 + samples.length * 2);
+        const view = new DataView(buffer);
+
+        const writeString = (offset, str) => {
+          for (let i = 0; i < str.length; i++) {
+            view.setUint8(offset + i, str.charCodeAt(i));
+          }
+        };
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * 2, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeString(36, 'data');
+        view.setUint32(40, samples.length * 2, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples.length; i++, offset += 2) {
+          const s = Math.max(-1, Math.min(1, samples[i]));
+          view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+        }
+
+        return new Blob([buffer], { type: 'audio/wav' });
+      }
+
+      function mergePcm(chunksList) {
+        const total = chunksList.reduce((sum, c) => sum + c.length, 0);
+        const merged = new Float32Array(total);
+        let offset = 0;
+        for (const chunk of chunksList) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return merged;
+      }
+
+      function finishWithBlob(blob, mime) {
+        audioBlob = blob;
+        chosenMime = mime;
+        revokeUrl();
+        audioUrl = URL.createObjectURL(blob);
+        player.src = audioUrl;
+        player.hidden = false;
+        setRecordingUi(false);
+        setStatus(`录音完成（${(blob.size / 1024).toFixed(1)} KB，${mime}）`);
+      }
+
+      async function startWavRecording(stream) {
+        useWavFallback = true;
+        pcmChunks = [];
+        audioContext = new AudioContext();
+        sourceNode = audioContext.createMediaStreamSource(stream);
+        // ScriptProcessor 已废弃但仍广泛可用；用于把 PCM 收成 16k WAV
+        processorNode = audioContext.createScriptProcessor(4096, 1, 1);
+        processorNode.onaudioprocess = (event) => {
+          const input = event.inputBuffer.getChannelData(0);
+          const downsampled = downsampleBuffer(
+            input,
+            audioContext.sampleRate,
+            TARGET_SAMPLE_RATE,
+          );
+          pcmChunks.push(new Float32Array(downsampled));
+        };
+        const mute = audioContext.createGain();
+        mute.gain.value = 0;
+        sourceNode.connect(processorNode);
+        processorNode.connect(mute);
+        mute.connect(audioContext.destination);
+        startTimer();
+        setRecordingUi(true);
+        setStatus('录音中（audio/wav · 16kHz）…');
+      }
+
+      function stopWavRecording() {
+        if (processorNode) {
+          processorNode.disconnect();
+          processorNode.onaudioprocess = null;
+          processorNode = null;
+        }
+        if (sourceNode) {
+          sourceNode.disconnect();
+          sourceNode = null;
+        }
+        if (audioContext) {
+          audioContext.close();
+          audioContext = null;
+        }
+        const samples = mergePcm(pcmChunks);
+        pcmChunks = [];
+        const blob = encodeWav(samples, TARGET_SAMPLE_RATE);
+        finishWithBlob(blob, 'audio/wav');
+      }
+
+      async function startRecording() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          setStatus('当前浏览器不支持录音', true);
+          return;
+        }
+
+        try {
+          clearRecording(false);
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              channelCount: 1,
+              echoCancellation: true,
+              noiseSuppression: true,
+            },
+          });
+
+          chosenMime = pickMimeType();
+          // 有 Ogg Opus 时用 MediaRecorder（与后端 ogg-opus 对齐）；否则录 16k WAV
+          if (chosenMime && window.MediaRecorder) {
+            useWavFallback = false;
+            chunks = [];
+            mediaRecorder = new MediaRecorder(mediaStream, { mimeType: chosenMime });
+            chosenMime = mediaRecorder.mimeType || chosenMime;
+
+            mediaRecorder.ondataavailable = (event) => {
+              if (event.data?.size > 0) chunks.push(event.data);
+            };
+            mediaRecorder.onerror = () => {
+              setStatus('录音出错', true);
+              stopRecording();
+            };
+            mediaRecorder.onstop = () => {
+              const blob = new Blob(chunks, { type: chosenMime });
+              finishWithBlob(blob, chosenMime);
+            };
+
+            mediaRecorder.start(250);
+            startTimer();
+            setRecordingUi(true);
+            setStatus(`录音中（${chosenMime}）…`);
+          } else {
+            await startWavRecording(mediaStream);
+          }
+        } catch (err) {
+          setStatus(err?.message || '无法访问麦克风', true);
+          cleanupStream();
+          setRecordingUi(false);
+        }
+      }
+
+      function cleanupStream() {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach((t) => t.stop());
+          mediaStream = null;
+        }
+        mediaRecorder = null;
+      }
+
+      function stopRecording() {
+        stopTimer();
+        if (useWavFallback) {
+          stopWavRecording();
+          cleanupStream();
+          return;
+        }
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+        } else {
+          setRecordingUi(false);
+        }
+        cleanupStream();
+      }
+
+      function clearRecording(resetStatus = true) {
+        stopTimer();
+        timerEl.textContent = '00:00';
+        chunks = [];
+        pcmChunks = [];
+        audioBlob = null;
+        useWavFallback = false;
+        revokeUrl();
+        player.removeAttribute('src');
+        player.hidden = true;
+        resultEl.textContent = '';
+        setRecordingUi(false);
+        if (resetStatus) setStatus('');
+      }
+
+      function fileNameForMime(mime) {
+        if (mime.includes('ogg')) return 'recording.ogg';
+        if (mime.includes('wav')) return 'recording.wav';
+        if (mime.includes('webm')) return 'recording.webm';
+        return 'recording.audio';
+      }
+
+      async function recognize() {
+        if (!audioBlob) {
+          setStatus('请先录音', true);
+          return;
+        }
+
+        recognizeBtn.disabled = true;
+        startBtn.disabled = true;
+        clearBtn.disabled = true;
+        setStatus('上传识别中…');
+        resultEl.textContent = '';
+
+        const form = new FormData();
+        form.append('audio', audioBlob, fileNameForMime(chosenMime));
+
+        try {
+          const res = await fetch('/speech/asr', {
+            method: 'POST',
+            body: form,
+          });
+          const data = await res.json().catch(() => null);
+
+          if (!res.ok) {
+            const msg = data?.message;
+            const text =
+              typeof msg === 'string'
+                ? msg
+                : Array.isArray(msg)
+                  ? msg.join(', ')
+                  : `请求失败 (${res.status})`;
+            throw new Error(text);
+          }
+
+          let text = data?.text ?? data;
+          if (text && typeof text === 'object') {
+            text = text.Result ?? text.result ?? JSON.stringify(text, null, 2);
+          }
+          resultEl.textContent = text || '(空结果)';
+          setStatus('识别完成');
+        } catch (err) {
+          setStatus(err?.message || '识别失败', true);
+        } finally {
+          setRecordingUi(false);
+        }
+      }
+
+      startBtn.addEventListener('click', startRecording);
+      stopBtn.addEventListener('click', stopRecording);
+      recognizeBtn.addEventListener('click', recognize);
+      clearBtn.addEventListener('click', () => clearRecording(true));
+
+      window.addEventListener('beforeunload', () => {
+        if (mediaRecorder || useWavFallback) stopRecording();
+        revokeUrl();
+      });
+    </script>
+  </body>
+</html>

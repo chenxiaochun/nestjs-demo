@@ -16,6 +16,7 @@ import { CronJob } from 'cron';
 import { JobModule } from './job/job.module';
 import { Job } from './job/entities/job.entity';
 import { ToolModule } from './tool/tool.module';
+import { SpeechModule } from './speech/speech.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { ToolModule } from './tool/tool.module';
     ScheduleModule.forRoot(),
     JobModule,
     ToolModule,
+    SpeechModule,
   ],
   controllers: [AppController],
   providers: [AppService],
