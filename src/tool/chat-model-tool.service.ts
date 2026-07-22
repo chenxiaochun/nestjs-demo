@@ -13,6 +13,8 @@ export class ChatModelToolService {
     this.tool = new ChatOpenAI({
       apiKey,
       model: modelName,
+      timeout: 45_000,
+      maxRetries: 1,
       configuration: {
         baseURL: baseUrl,
       },

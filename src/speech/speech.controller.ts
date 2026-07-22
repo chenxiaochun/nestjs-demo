@@ -29,7 +29,14 @@ export class SpeechController {
       mimeType: file.mimeType,
       size: file.size,
     };
-    const text = await this.speechService.recognizeBySentence(audio);
+    const result = await this.speechService.recognizeBySentence(audio);
+    // 腾讯云返回对象时取 Result；统一给前端 string
+    const text =
+      typeof result === 'string'
+        ? result
+        : ((result as { Result?: string; result?: string })?.Result ??
+          (result as { result?: string })?.result ??
+          '');
     return { text };
   }
 }

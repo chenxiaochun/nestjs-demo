@@ -17,6 +17,7 @@ import { JobModule } from './job/job.module';
 import { Job } from './job/entities/job.entity';
 import { ToolModule } from './tool/tool.module';
 import { SpeechModule } from './speech/speech.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -31,6 +32,9 @@ import { SpeechModule } from './speech/speech.module';
       rootPath: join(__dirname, '..', 'public'),
     }),
     AiCornModule,
+    EventEmitterModule.forRoot({
+      maxListeners: 20,
+    }),
     MailerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

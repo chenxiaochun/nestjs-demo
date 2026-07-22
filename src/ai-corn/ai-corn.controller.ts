@@ -1,22 +1,17 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
-  Query,
-  Sse,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Sse } from '@nestjs/common';
 import { AiCornService } from './ai-corn.service';
 import { CreateAiCornDto } from './dto/create-ai-corn.dto';
 import { UpdateAiCornDto } from './dto/update-ai-corn.dto';
 import { from, map } from 'rxjs';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AI_TTS_STREAM_EVENT } from 'src/speech/stream-events';
 
 @Controller('ai-corn')
 export class AiCornController {
-  constructor(private readonly aiCornService: AiCornService) {}
+  constructor(
+    private readonly aiCornService: AiCornService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   @Get('chat')
   async runChain(@Query('query') query: string) {
@@ -25,8 +20,16 @@ export class AiCornController {
   }
 
   @Sse('chat/stream')
-  runChainStream(@Query('query') query: string) {
-    return from(this.aiCornService.runChainStream(query)).pipe(
+  runChainStream(@Query('query') query: string, @Query('ttsSessionId') ttsSessionId?: string) {
+    const sessionId = ttsSessionId ? ttsSessionId.trim() : undefined;
+    if (sessionId) {
+      this.eventEmitter.emit(AI_TTS_STREAM_EVENT, {
+        type: 'start',
+        sessionId,
+        query,
+      });
+    }
+    return from(this.aiCornService.runChainStream(query, sessionId)).pipe(
       map((chunk) => ({ data: chunk })),
     );
   }

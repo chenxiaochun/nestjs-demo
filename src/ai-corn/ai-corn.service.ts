@@ -13,6 +13,8 @@ import {
 import { z } from 'zod';
 import { Runnable } from '@langchain/core/runnables';
 import { Tool } from '@langchain/core/tools';
+import { AI_TTS_STREAM_EVENT } from 'src/speech/stream-events';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 const queryUserArgsSchema = z.object({
   userId: z.string().describe('用户ID'),
@@ -58,6 +60,7 @@ export class AiCornService {
     @Inject('DB_USER_CRUD_TOOL') private dbUserCrudTool: Tool,
     @Inject('CRON_JOB_TOOL') private cronJobTool: Tool,
     @Inject('TIME_NOW_TOOL') private timeNowTool: Tool,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     this.modelWithTools = this.chatModel.bindTools([
       this.queryUserTool,
@@ -177,34 +180,70 @@ export class AiCornService {
     }
   }
 
-  async *runChainStream(query: string) {
+  async *runChainStream(query: string, sessionId?: string) {
     const messages = this.createMessages(query);
 
     while (true) {
       const stream = await this.modelWithTools.stream(messages);
       let fullAIMessage: AIMessageChunk | null = null;
 
-      for await (const chunk of stream) {
-        const messageChunk = chunk as AIMessageChunk;
-        fullAIMessage = fullAIMessage ? fullAIMessage.concat(messageChunk) : messageChunk;
+      try {
+        for await (const chunk of stream) {
+          const messageChunk = chunk as AIMessageChunk;
+          fullAIMessage = fullAIMessage ? fullAIMessage.concat(messageChunk) : messageChunk;
 
-        const hasToolCallChunk = !!messageChunk.tool_call_chunks?.length;
+          const hasToolCallChunk = !!messageChunk.tool_call_chunks?.length;
+          const textChunk =
+            !hasToolCallChunk && typeof messageChunk.content === 'string'
+              ? messageChunk.content
+              : '';
 
-        if (!hasToolCallChunk && messageChunk.content) {
-          yield messageChunk.content;
+          if (sessionId && textChunk) {
+            this.eventEmitter.emit(AI_TTS_STREAM_EVENT, {
+              type: 'chunk',
+              sessionId,
+              chunk: textChunk,
+            });
+          }
+
+          if (textChunk) {
+            yield textChunk;
+          }
         }
+      } catch (error) {
+        if (sessionId) {
+          this.eventEmitter.emit(AI_TTS_STREAM_EVENT, {
+            type: 'error',
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        throw error;
       }
 
       if (!fullAIMessage) {
+        if (sessionId) {
+          this.eventEmitter.emit(AI_TTS_STREAM_EVENT, {
+            type: 'end',
+            sessionId,
+          });
+        }
         return;
       }
 
       messages.push(fullAIMessage);
 
       if (!fullAIMessage.tool_calls?.length) {
+        if (sessionId) {
+          this.eventEmitter.emit(AI_TTS_STREAM_EVENT, {
+            type: 'end',
+            sessionId,
+          });
+        }
         return;
       }
 
+      // 工具调用过程不送 TTS，只流式展示进度
       yield* this.handleToolCalls(fullAIMessage.tool_calls, messages);
     }
   }
