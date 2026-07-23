@@ -18,6 +18,7 @@ import { Job } from './job/entities/job.entity';
 import { ToolModule } from './tool/tool.module';
 import { SpeechModule } from './speech/speech.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { AguiModule } from './agui/agui.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     JobModule,
     ToolModule,
     SpeechModule,
+    AguiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

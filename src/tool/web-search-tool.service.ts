@@ -13,7 +13,13 @@ export class WebSearchToolService {
   constructor() {
     const webSearchArgsSchema = z.object({
       query: z.string().min(1).describe('搜索关键词'),
-      count: z.int().min(1).max(10).optional().describe('返回搜索结果数量，最小 1，最多 10 条'),
+      // 博查在 count 过小时，部分结果被过滤后可能返回空 value；下限 5 更稳妥
+      count: z
+        .int()
+        .min(5)
+        .max(10)
+        .optional()
+        .describe('返回搜索结果数量，默认 10，最少 5，最多 10 条'),
     });
 
     this.tool = tool(
@@ -28,7 +34,8 @@ export class WebSearchToolService {
           query,
           freshness: 'noLimit',
           summary: true,
-          count: count || 10,
+          // 避免模型传 count=1 时被过滤后变成空结果
+          count: Math.max(count ?? 10, 5),
         };
 
         const response = await fetch(url, {
@@ -55,14 +62,23 @@ export class WebSearchToolService {
           if (!webPages.length) {
             return '搜索无结果';
           }
+          // 博查字段是 name，不是 title
           return webPages
-            .map((page: { title?: string; url?: string; summary?: string; siteName?: string }) =>
-              [
-                `标题：${page.title ?? ''}`,
-                `URL: ${page.url ?? ''}`,
-                `摘要：${page.summary ?? ''}`,
-                `网站名称：${page.siteName ?? ''}`,
-              ].join('\n'),
+            .map(
+              (page: {
+                name?: string;
+                title?: string;
+                url?: string;
+                summary?: string;
+                snippet?: string;
+                siteName?: string;
+              }) =>
+                [
+                  `标题：${page.name ?? page.title ?? ''}`,
+                  `URL: ${page.url ?? ''}`,
+                  `摘要：${page.summary ?? page.snippet ?? ''}`,
+                  `网站名称：${page.siteName ?? ''}`,
+                ].join('\n'),
             )
             .join('\n\n');
         }
