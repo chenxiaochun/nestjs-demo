@@ -1,9 +1,21 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { createAgent } from 'langchain';
+import { AIMessage, ToolMessage } from '@langchain/core/messages';
 import { Tool } from '@langchain/core/tools';
 import { ChatOpenAI } from '@langchain/openai';
 import { toBaseMessages, toUIMessageStream } from '@ai-sdk/langchain';
 import { UIMessage } from 'ai';
+
+type AnyPart = Record<string, unknown> & { type?: string };
+type StreamEvent = {
+  event?: string;
+  name?: string;
+  run_id?: string;
+  data?: {
+    input?: unknown;
+    output?: unknown;
+  };
+};
 
 @Injectable()
 export class AguiService {
@@ -24,26 +36,235 @@ export class AguiService {
 
   async stream(messages: UIMessage[]) {
     /**
-     * UIMessage → LangChain messages → agent.streamEvents → UIMessageStream
-     * 使用 streamEvents（而非 stream + streamMode）更稳定，AI SDK 适配器能正确解析文本增量。
+     * Nest 下 agent.stream + streamMode 经常丢 text-delta，因此用 streamEvents 保正文。
+     * 但 streamEvents 适配器不会发 tool-input-available，且 tool output 可能是
+     * LangChain 序列化对象 —— 会导致下一轮历史缺 args，触发 DashScope NoneType.startswith。
+     * 这里补齐 input，并清洗 output。
      */
-    const lcMessages = await toBaseMessages(messages);
-    this.logger.debug(`agui stream messages=${lcMessages.length}`);
+    const sanitizedUi = this.sanitizeUiMessages(messages);
+    const lcMessages = this.sanitizeLcMessages(await toBaseMessages(sanitizedUi));
 
-    const eventStream = this.agent.streamEvents(
-      { messages: lcMessages },
+    this.logger.debug(
+      `agui stream ui=${messages.length} lc=${lcMessages.length} types=${lcMessages
+        .map((m) => m.getType())
+        .join(',')}`,
+    );
+
+    const toolInputs = new Map<string, unknown>();
+    const eventStream = this.normalizeEventStream(
+      this.agent.streamEvents(
+        { messages: lcMessages },
+        {
+          version: 'v2',
+          recursionLimit: 30,
+        },
+      ),
+      toolInputs,
+    );
+
+    const uiStream = toUIMessageStream(
+      // streamEvents 与适配器类型定义不完全对齐，运行时按 StreamEvent 处理
+      eventStream as never,
       {
-        version: 'v2',
-        recursionLimit: 30,
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.error(`agui stream error: ${message}`);
+        },
       },
     );
 
-    return toUIMessageStream(eventStream, {
-      onError: (error) => {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(`agui stream error: ${message}`);
-        return message;
+    return this.ensureToolInputAvailable(
+      uiStream as ReadableStream<Record<string, unknown>>,
+      toolInputs,
+    );
+  }
+
+  private sanitizeUiMessages(messages: UIMessage[]): UIMessage[] {
+    return messages.map((message) => ({
+      ...message,
+      parts: message.parts?.map((part) => {
+        const p = part as AnyPart;
+        if (!this.isToolPart(p)) {
+          return part;
+        }
+        return {
+          ...p,
+          input: p.input ?? {},
+          output: this.unwrapToolOutput(p.output),
+        } as typeof part;
+      }),
+    }));
+  }
+
+  private sanitizeLcMessages(
+    messages: Awaited<ReturnType<typeof toBaseMessages>>,
+  ) {
+    return messages.map((message) => {
+      if (AIMessage.isInstance(message) && Array.isArray(message.tool_calls)) {
+        return new AIMessage({
+          content: message.content,
+          tool_calls: message.tool_calls.map((toolCall) => ({
+            ...toolCall,
+            args: toolCall.args ?? {},
+          })),
+          id: message.id,
+          additional_kwargs: message.additional_kwargs,
+          response_metadata: message.response_metadata,
+        });
+      }
+
+      if (ToolMessage.isInstance(message)) {
+        return new ToolMessage({
+          content: this.unwrapToolOutput(message.content),
+          tool_call_id: message.tool_call_id,
+          name: message.name,
+          status: message.status,
+          id: message.id,
+        });
+      }
+
+      return message;
+    });
+  }
+
+  private async *normalizeEventStream(
+    eventStream: AsyncIterable<StreamEvent>,
+    toolInputs: Map<string, unknown>,
+  ): AsyncGenerator<StreamEvent> {
+    for await (const event of eventStream) {
+      if (event.event === 'on_tool_start' && event.run_id) {
+        toolInputs.set(event.run_id, this.parseToolStartInput(event.data?.input));
+      }
+
+      if (event.event === 'on_tool_end') {
+        yield {
+          ...event,
+          data: {
+            ...event.data,
+            output: this.unwrapToolOutput(event.data?.output),
+          },
+        };
+        continue;
+      }
+
+      yield event;
+    }
+  }
+
+  private ensureToolInputAvailable(
+    stream: ReadableStream<Record<string, unknown>>,
+    toolInputs: Map<string, unknown>,
+  ): ReadableStream<Record<string, unknown>> {
+    const unwrap = this.unwrapToolOutput.bind(this);
+    return new ReadableStream({
+      async start(controller) {
+        const reader = stream.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+
+            if (value.type === 'tool-input-start') {
+              controller.enqueue(value);
+              const toolCallId = String(value.toolCallId ?? '');
+              controller.enqueue({
+                type: 'tool-input-available',
+                toolCallId,
+                toolName: value.toolName,
+                input: toolInputs.get(toolCallId) ?? {},
+                dynamic: true,
+              });
+              continue;
+            }
+
+            if (value.type === 'tool-output-available') {
+              controller.enqueue({
+                ...value,
+                output: unwrap(value.output),
+              });
+              continue;
+            }
+
+            controller.enqueue(value);
+          }
+          controller.close();
+        } catch (error) {
+          controller.error(error);
+        } finally {
+          reader.releaseLock();
+        }
       },
     });
+  }
+
+  private parseToolStartInput(input: unknown): Record<string, unknown> {
+    if (input == null) {
+      return {};
+    }
+    if (typeof input === 'string') {
+      try {
+        const parsed = JSON.parse(input);
+        return parsed && typeof parsed === 'object' ? parsed : { value: parsed };
+      } catch {
+        return { value: input };
+      }
+    }
+    if (typeof input === 'object') {
+      const record = input as Record<string, unknown>;
+      if (typeof record.input === 'string') {
+        return this.parseToolStartInput(record.input);
+      }
+      if (record.input && typeof record.input === 'object') {
+        return record.input as Record<string, unknown>;
+      }
+      return record;
+    }
+    return {};
+  }
+
+  private isToolPart(part: AnyPart): boolean {
+    return (
+      part.type === 'dynamic-tool' ||
+      (typeof part.type === 'string' && part.type.startsWith('tool-'))
+    );
+  }
+
+  private isLangChainSerialized(value: unknown): boolean {
+    return (
+      !!value &&
+      typeof value === 'object' &&
+      'lc' in (value as object) &&
+      (value as { lc?: unknown }).lc === 1
+    );
+  }
+
+  private unwrapToolOutput(value: unknown): string {
+    if (value == null) {
+      return '';
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.startsWith('{') && trimmed.includes('"lc":1')) {
+        try {
+          return this.unwrapToolOutput(JSON.parse(trimmed));
+        } catch {
+          return value;
+        }
+      }
+      return value;
+    }
+    if (this.isLangChainSerialized(value)) {
+      const kwargs = (value as { kwargs?: { content?: unknown } }).kwargs;
+      return this.unwrapToolOutput(kwargs?.content ?? '');
+    }
+    if (typeof value === 'object' && value !== null && 'content' in value) {
+      return this.unwrapToolOutput((value as { content: unknown }).content);
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
   }
 }
