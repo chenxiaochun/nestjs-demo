@@ -18,6 +18,10 @@ export class User {
   @Column({ type: 'varchar', length: 50 })
   email!: string;
 
+  // bcrypt 哈希固定约 60 字符，length:50 会被 MySQL 截断/写空导致无法登录
+  @Column({ type: 'varchar', length: 100 })
+  password!: string;
+
   @CreateDateColumn({ type: 'timestamp' })
   createdAt!: Date;
 

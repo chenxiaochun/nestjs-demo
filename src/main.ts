@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { TtsRelayService } from './speech/tts-relay.service';
 import { WebSocketServer } from 'ws';
+import { ValidationPipe } from '@nestjs/common';
 
 declare const module: { hot: { accept: () => void; dispose: (callback: () => void) => void } };
 
@@ -29,6 +30,8 @@ async function bootstrap() {
     origin: '*',
     credentials: true,
   });
+
+  app.useGlobalPipes(new ValidationPipe());
 
   await app.listen(process.env.PORT ?? 3000);
 

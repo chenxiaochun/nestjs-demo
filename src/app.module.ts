@@ -19,6 +19,7 @@ import { ToolModule } from './tool/tool.module';
 import { SpeechModule } from './speech/speech.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AguiModule } from './agui/agui.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { AguiModule } from './agui/agui.module';
     ToolModule,
     SpeechModule,
     AguiModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

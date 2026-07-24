@@ -4,7 +4,7 @@ import { AIMessage, ToolMessage } from '@langchain/core/messages';
 import { Tool } from '@langchain/core/tools';
 import { ChatOpenAI } from '@langchain/openai';
 import { toBaseMessages, toUIMessageStream } from '@ai-sdk/langchain';
-import { UIMessage } from 'ai';
+import { UIMessage, UIMessageChunk } from 'ai';
 
 type AnyPart = Record<string, unknown> & { type?: string };
 type StreamEvent = {
@@ -34,7 +34,7 @@ export class AguiService {
     });
   }
 
-  async stream(messages: UIMessage[]) {
+  async stream(messages: UIMessage[]): Promise<ReadableStream<UIMessageChunk>> {
     /**
      * Nest 下 agent.stream + streamMode 经常丢 text-delta，因此用 streamEvents 保正文。
      * 但 streamEvents 适配器不会发 tool-input-available，且 tool output 可能是
@@ -73,10 +73,7 @@ export class AguiService {
       },
     );
 
-    return this.ensureToolInputAvailable(
-      uiStream as ReadableStream<Record<string, unknown>>,
-      toolInputs,
-    );
+    return this.ensureToolInputAvailable(uiStream, toolInputs);
   }
 
   private sanitizeUiMessages(messages: UIMessage[]): UIMessage[] {
@@ -152,11 +149,11 @@ export class AguiService {
   }
 
   private ensureToolInputAvailable(
-    stream: ReadableStream<Record<string, unknown>>,
+    stream: ReadableStream<UIMessageChunk>,
     toolInputs: Map<string, unknown>,
-  ): ReadableStream<Record<string, unknown>> {
+  ): ReadableStream<UIMessageChunk> {
     const unwrap = this.unwrapToolOutput.bind(this);
-    return new ReadableStream({
+    return new ReadableStream<UIMessageChunk>({
       async start(controller) {
         const reader = stream.getReader();
         try {
@@ -167,12 +164,11 @@ export class AguiService {
 
             if (value.type === 'tool-input-start') {
               controller.enqueue(value);
-              const toolCallId = String(value.toolCallId ?? '');
               controller.enqueue({
                 type: 'tool-input-available',
-                toolCallId,
+                toolCallId: value.toolCallId,
                 toolName: value.toolName,
-                input: toolInputs.get(toolCallId) ?? {},
+                input: toolInputs.get(value.toolCallId) ?? {},
                 dynamic: true,
               });
               continue;
