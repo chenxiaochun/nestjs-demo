@@ -14,7 +14,7 @@ const JOB_SYSTEM_PROMPT = [
   '你是定时任务执行助手。请完整执行用户指令，必要时调用工具。',
   '可用工具：',
   '1. sendMail：发送邮件。参数 to、subject，以及 html 或 text（正文必须有实质内容）。',
-  '2. web_search：搜索互联网信息。',
+  '2. webSearch：搜索互联网信息。',
   '3. timeNow：获取当前服务器时间。',
   '规则：',
   '1. 若指令要求发邮件，必须调用 sendMail，且 to 使用指令中的邮箱。',
@@ -57,7 +57,7 @@ export class JobAgentService {
       if (toolName === 'sendMail') {
         return this.toToolContent(await this.sendMailTool.invoke(args));
       }
-      if (toolName === 'web_search') {
+      if (toolName === 'webSearch') {
         return this.toToolContent(await this.webSearchTool.invoke(args));
       }
       if (toolName === 'timeNow') {

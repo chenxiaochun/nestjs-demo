@@ -27,16 +27,16 @@ const SYSTEM_PROMPT = [
   '2. sendMail：发送邮件。',
   '   - 发用户资料：传 to、subject、userId（userId 必须是系统用户ID，不是邮箱）。',
   '   - 发任意内容（如搜索结果）：传 to、subject，以及完整的 html 或 text，不要传 userId。',
-  '3. web_search：搜索互联网上的最新信息。',
+  '3. webSearch：搜索互联网上的最新信息。',
   '规则：',
   '1. 需要系统用户详情时先调用 queryUser。',
   '2. “搜索并整理成 HTML 发到邮箱”必须分两轮：',
-  '   第一轮只调用 web_search；',
+  '   第一轮只调用 webSearch；',
   '   第二轮根据搜索结果生成完整 HTML，再调用 sendMail(to, subject, html)。',
-  '3. 严禁在同一轮同时调用 web_search 和 sendMail。',
+  '3. 严禁在同一轮同时调用 webSearch 和 sendMail。',
   '4. sendMail 的 html 必须包含真实搜索内容（标题、链接、摘要），禁止空正文或只有一句话说明。',
   '5. 收件人邮箱 ≠ 用户ID；不要把邮箱当成 userId。',
-  '6. 涉及新闻、实时信息时必须使用 web_search，不要凭空编造。',
+  '6. 涉及新闻、实时信息时必须使用 webSearch，不要凭空编造。',
   '7. timeNow：获取当前服务器时间。禁止猜测或编造时间。',
   '8. cronJob：定时任务。add / list / toggle。',
   '   - add 必填：type、instruction。',
@@ -90,7 +90,7 @@ export class AiCornService {
     toolCalls: NonNullable<AIMessage['tool_calls']>,
     messages: BaseMessage[],
   ): AsyncGenerator<string> {
-    const hasWebSearch = toolCalls.some((call) => call.name === 'web_search');
+    const hasWebSearch = toolCalls.some((call) => call.name === 'webSearch');
 
     for (const toolCall of toolCalls) {
       const toolCallId = toolCall.id || '';
@@ -100,7 +100,7 @@ export class AiCornService {
 
       if (toolName === 'sendMail' && hasWebSearch) {
         const reject =
-          '同一轮不能同时 web_search 和 sendMail。请先查看搜索结果，再单独调用 sendMail，并传入包含完整搜索内容的 html。本次未发送邮件。';
+          '同一轮不能同时 webSearch 和 sendMail。请先查看搜索结果，再单独调用 sendMail，并传入包含完整搜索内容的 html。本次未发送邮件。';
         messages.push(
           new ToolMessage({
             tool_call_id: toolCallId,
@@ -135,7 +135,7 @@ export class AiCornService {
         } else {
           content = this.toToolContent(await this.sendMailTool.invoke(toolCall.args));
         }
-      } else if (toolName === 'web_search') {
+      } else if (toolName === 'webSearch') {
         content = this.toToolContent(await this.webSearchTool.invoke(toolCall.args));
         yield `\n===== 搜索结果 =====\n${content}\n==================\n`;
       } else if (toolName === 'dbUserCrud') {

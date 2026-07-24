@@ -17,11 +17,16 @@ export class AguiService {
       model: chatModel,
       tools: [this.webSearchTool],
       systemPrompt:
-        '你是AI助手，需要最新信息或者联网查询信息时，请使用WEB_SEARCH_TOOL工具查询之后再进行回答',
+        '你是AI助手，需要最新信息或者联网查询信息时，请使用 webSearch 工具查询之后再进行回答',
     });
   }
 
   async stream(messages: UIMessage[]) {
+    /**
+     * 因为 agent 是用 langchain 实现的，所以需要将 messages 转换为 langchain 的 messages 格式，然后才能传给 agent
+     * 然后 agent 会根据 messages 和 tools 进行推理，并返回推理结果
+     * 最后将推理结果转换为 UIMessage 格式，并返回给前端
+     */
     const lcMessages = await toBaseMessages(messages);
     const lgStream = await this.agent.stream(
       { messages: lcMessages },

@@ -85,7 +85,7 @@ Agent 可用工具：
 - `queryUser` — 按用户 ID 查询
 - `dbUserCrud` — 用户数据库增删改查
 - `sendMail` — 发送邮件
-- `web_search` — 联网搜索（博查）
+- `webSearch` — 联网搜索（博查）
 - `timeNow` — 当前服务器时间
 - `cronJob` — 添加 / 列表 / 启停定时任务
 

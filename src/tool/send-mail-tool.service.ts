@@ -79,7 +79,7 @@ export class SendMailToolService {
       {
         name: 'sendMail',
         description:
-          '发送邮件。场景1：发系统用户资料 → to、subject、userId。场景2：发搜索结果等任意内容 → to、subject，以及完整 html（必须含标题/链接/摘要等实质内容），不要传 userId。禁止与 web_search 同一轮调用；禁止空 html。',
+          '发送邮件。场景1：发系统用户资料 → to、subject、userId。场景2：发搜索结果等任意内容 → to、subject，以及完整 html（必须含标题/链接/摘要等实质内容），不要传 userId。禁止与 webSearch 同一轮调用；禁止空 html。',
         schema: sendMailArgsSchema,
       },
     );

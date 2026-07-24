@@ -86,7 +86,7 @@ export class WebSearchToolService {
         return `搜索失败: ${JSON.stringify(json)}`;
       },
       {
-        name: 'web_search',
+        name: 'webSearch',
         description:
           '搜索互联网上的信息。适用于新闻、天气、实时资讯、公开网页内容等需要联网查询的问题。',
         schema: webSearchArgsSchema,
